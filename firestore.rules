@@ -1,0 +1,238 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 0: Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Pillar 3 & Global Helpers
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isVerifiedOwner(userId) {
+      return isVerifiedUser() && request.auth.uid == userId;
+    }
+
+    // Pillar 2 & Pillar 5: Validation Blueprints (Anti-Update-Gap + Total Array Guarding)
+    function isValidUserProgress(data, userId) {
+      return data.keys().hasAll([
+          'uid',
+          'displayName',
+          'xp',
+          'dailyXp',
+          'dailyGoal',
+          'streak',
+          'lastActiveDate',
+          'hearts',
+          'maxHearts',
+          'scriptMode',
+          'showRomaji',
+          'soundEnabled',
+          'completedLessonIds',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid',
+          'displayName',
+          'xp',
+          'dailyXp',
+          'dailyGoal',
+          'streak',
+          'lastActiveDate',
+          'hearts',
+          'maxHearts',
+          'scriptMode',
+          'showRomaji',
+          'soundEnabled',
+          'completedLessonIds',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.uid is string && data.uid == userId && isValidId(data.uid)
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80
+        && data.xp is int && data.xp >= 0 && data.xp <= 1000000
+        && data.dailyXp is int && data.dailyXp >= 0 && data.dailyXp <= 50000
+        && data.dailyGoal is int && data.dailyGoal in [20, 50, 100]
+        && data.streak is int && data.streak >= 0 && data.streak <= 10000
+        && data.lastActiveDate is string && data.lastActiveDate.size() <= 10 && data.lastActiveDate.matches('^(\\d{4}-\\d{2}-\\d{2})?$')
+        && data.hearts is int && data.hearts >= 0 && data.hearts <= 5
+        && data.maxHearts is int && data.maxHearts == 5
+        && data.scriptMode is string && data.scriptMode.size() <= 16 && data.scriptMode in ['kana', 'furigana', 'kanji']
+        && data.showRomaji is bool
+        && data.soundEnabled is bool
+        && data.completedLessonIds is list
+        && data.completedLessonIds.size() <= 100
+        && (data.completedLessonIds.size() == 0 || (data.completedLessonIds[0] is string && data.completedLessonIds[0].size() >= 1 && data.completedLessonIds[0].size() <= 64))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidLessonAttempt(data, userId, attemptId) {
+      return data.keys().hasAll([
+          'attemptId',
+          'userId',
+          'lessonId',
+          'unitId',
+          'xpEarned',
+          'accuracy',
+          'mistakes',
+          'completedAt'
+        ])
+        && data.keys().hasOnly([
+          'attemptId',
+          'userId',
+          'lessonId',
+          'unitId',
+          'xpEarned',
+          'accuracy',
+          'mistakes',
+          'completedAt'
+        ])
+        && data.attemptId is string && data.attemptId == attemptId && isValidId(data.attemptId)
+        && data.userId is string && data.userId == userId && isValidId(data.userId)
+        && data.lessonId is string && data.lessonId.size() >= 1 && data.lessonId.size() <= 64 && isValidId(data.lessonId)
+        && data.unitId is string && data.unitId.size() >= 1 && data.unitId.size() <= 64 && isValidId(data.unitId)
+        && data.xpEarned is int && data.xpEarned >= 0 && data.xpEarned <= 500
+        && data.accuracy is int && data.accuracy >= 0 && data.accuracy <= 100
+        && data.mistakes is int && data.mistakes >= 0 && data.mistakes <= 100
+        && data.completedAt is timestamp;
+    }
+
+    function isValidItemMastery(data, userId, itemId) {
+      return data.keys().hasAll([
+          'itemId',
+          'userId',
+          'kind',
+          'correctCount',
+          'incorrectCount',
+          'masteryLevel',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'itemId',
+          'userId',
+          'kind',
+          'correctCount',
+          'incorrectCount',
+          'masteryLevel',
+          'updatedAt'
+        ])
+        && data.itemId is string && data.itemId == itemId && data.itemId.size() <= 64 && isValidId(data.itemId)
+        && data.userId is string && data.userId == userId && isValidId(data.userId)
+        && data.kind is string && data.kind.size() <= 16 && data.kind in ['hiragana', 'katakana', 'kanji', 'vocab', 'grammar']
+        && data.correctCount is int && data.correctCount >= 0 && data.correctCount <= 10000
+        && data.incorrectCount is int && data.incorrectCount >= 0 && data.incorrectCount <= 10000
+        && data.masteryLevel is int && data.masteryLevel >= 0 && data.masteryLevel <= 5
+        && data.updatedAt is timestamp;
+    }
+
+    // Collection: /users/{userId}
+    match /users/{userId} {
+      // Pillar 6: Strict Owner-Only Get, No Blanket List
+      allow get: if isValidId(userId) && isOwner(userId);
+      allow list: if false;
+
+      allow create: if isVerifiedOwner(userId)
+        && isValidId(userId)
+        && isValidUserProgress(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      // Action-Based Update Pattern wrapped by isValidUserProgress
+      allow update: if isVerifiedOwner(userId)
+        && isValidId(userId)
+        && isValidUserProgress(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Action 1: Update display preferences & daily goal
+          incoming().diff(existing()).affectedKeys().hasOnly(['scriptMode', 'showRomaji', 'soundEnabled', 'dailyGoal', 'updatedAt'])
+          // Action 2: Update hearts (mistake or practice refill)
+          || incoming().diff(existing()).affectedKeys().hasOnly(['hearts', 'updatedAt'])
+          // Action 3: Complete lesson / merge local progress
+          || incoming().diff(existing()).affectedKeys().hasOnly(['xp', 'dailyXp', 'streak', 'lastActiveDate', 'hearts', 'completedLessonIds', 'updatedAt'])
+        );
+
+      allow delete: if false;
+
+      // Subcollection: /users/{userId}/lessonAttempts/{attemptId}
+      match /lessonAttempts/{attemptId} {
+        allow get: if isValidId(userId)
+          && isValidId(attemptId)
+          && isOwner(userId)
+          && existing().userId == request.auth.uid;
+
+        // Pillar 8: Secure List Query enforcing resource.data ownership (no get()/exists() in list)
+        allow list: if isOwner(userId)
+          && resource.data.userId == request.auth.uid;
+
+        // Pillar 1: Master Gate verifies parent /users/{userId} exists
+        allow create: if isVerifiedOwner(userId)
+          && isValidId(userId)
+          && isValidId(attemptId)
+          && isValidLessonAttempt(incoming(), userId, attemptId)
+          && incoming().completedAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId));
+
+        // Append-only audit trail
+        allow update: if false;
+        allow delete: if false;
+      }
+
+      // Subcollection: /users/{userId}/itemMastery/{itemId}
+      match /itemMastery/{itemId} {
+        allow get: if isValidId(userId)
+          && isValidId(itemId)
+          && isOwner(userId)
+          && existing().userId == request.auth.uid;
+
+        allow list: if isOwner(userId)
+          && resource.data.userId == request.auth.uid;
+
+        allow create: if isVerifiedOwner(userId)
+          && isValidId(userId)
+          && isValidId(itemId)
+          && isValidItemMastery(incoming(), userId, itemId)
+          && incoming().updatedAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId));
+
+        allow update: if isVerifiedOwner(userId)
+          && isValidId(userId)
+          && isValidId(itemId)
+          && isValidItemMastery(incoming(), userId, itemId)
+          && incoming().itemId == existing().itemId
+          && incoming().userId == existing().userId
+          && incoming().kind == existing().kind
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['correctCount', 'incorrectCount', 'masteryLevel', 'updatedAt'])
+          && exists(/databases/$(database)/documents/users/$(userId));
+
+        allow delete: if false;
+      }
+    }
+  }
+}

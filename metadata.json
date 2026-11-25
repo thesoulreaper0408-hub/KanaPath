@@ -1,0 +1,6 @@
+{
+  "name": "KanaPath",
+  "description": "An interactive Japanese language learning web app featuring Hiragana, Katakana, basic Kanji, vocabulary, and grammar with progressive script toggles, gamified lessons, and persistent database progress.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

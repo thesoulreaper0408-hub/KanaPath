@@ -1,0 +1,219 @@
+{
+  "entities": {
+    "UserProgress": {
+      "title": "UserProgress",
+      "description": "Persistent Japanese learner profile, gamification stats, script preferences, and completed lesson IDs.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Firebase Auth UID of the learner."
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Public learner display name."
+        },
+        "xp": {
+          "type": "integer",
+          "description": "Total lifetime XP earned."
+        },
+        "dailyXp": {
+          "type": "integer",
+          "description": "XP earned on lastActiveDate."
+        },
+        "dailyGoal": {
+          "type": "integer",
+          "enum": [20, 50, 100],
+          "description": "Selected daily XP target."
+        },
+        "streak": {
+          "type": "integer",
+          "description": "Consecutive active learning days."
+        },
+        "lastActiveDate": {
+          "type": "string",
+          "maxLength": 10,
+          "pattern": "^(\\d{4}-\\d{2}-\\d{2})?$",
+          "description": "Local YYYY-MM-DD date of last completed lesson."
+        },
+        "hearts": {
+          "type": "integer",
+          "description": "Current remaining hearts (0 to 5)."
+        },
+        "maxHearts": {
+          "type": "integer",
+          "enum": [5],
+          "description": "Maximum hearts capacity."
+        },
+        "scriptMode": {
+          "type": "string",
+          "enum": ["kana", "furigana", "kanji"],
+          "description": "Preferred Japanese script display mode."
+        },
+        "showRomaji": {
+          "type": "boolean",
+          "description": "Whether Romaji pronunciation guides are displayed."
+        },
+        "soundEnabled": {
+          "type": "boolean",
+          "description": "Whether sound effects and pronunciation audio are enabled."
+        },
+        "completedLessonIds": {
+          "type": "array",
+          "description": "Bounded list of completed lesson IDs (max 100)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of profile creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of latest update."
+        }
+      },
+      "required": [
+        "uid",
+        "displayName",
+        "xp",
+        "dailyXp",
+        "dailyGoal",
+        "streak",
+        "lastActiveDate",
+        "hearts",
+        "maxHearts",
+        "scriptMode",
+        "showRomaji",
+        "soundEnabled",
+        "completedLessonIds",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "LessonAttempt": {
+      "title": "LessonAttempt",
+      "description": "Immutable record of a completed Japanese lesson session.",
+      "type": "object",
+      "properties": {
+        "attemptId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "lessonId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "unitId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "xpEarned": {
+          "type": "integer"
+        },
+        "accuracy": {
+          "type": "integer"
+        },
+        "mistakes": {
+          "type": "integer"
+        },
+        "completedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "attemptId",
+        "userId",
+        "lessonId",
+        "unitId",
+        "xpEarned",
+        "accuracy",
+        "mistakes",
+        "completedAt"
+      ]
+    },
+    "ItemMastery": {
+      "title": "ItemMastery",
+      "description": "Per-character, vocabulary, or grammar mastery record for spaced practice.",
+      "type": "object",
+      "properties": {
+        "itemId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["hiragana", "katakana", "kanji", "vocab", "grammar"]
+        },
+        "correctCount": {
+          "type": "integer"
+        },
+        "incorrectCount": {
+          "type": "integer"
+        },
+        "masteryLevel": {
+          "type": "integer"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "itemId",
+        "userId",
+        "kind",
+        "correctCount",
+        "incorrectCount",
+        "masteryLevel",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserProgress"
+      },
+      "description": "Owner-only Japanese learner profile, XP, streak, hearts, preferences, and completed lessons."
+    },
+    "/users/{userId}/lessonAttempts/{attemptId}": {
+      "schema": {
+        "$ref": "#/entities/LessonAttempt"
+      },
+      "description": "Append-only completed lesson history for a specific learner."
+    },
+    "/users/{userId}/itemMastery/{itemId}": {
+      "schema": {
+        "$ref": "#/entities/ItemMastery"
+      },
+      "description": "Per-item mastery counters for kana, kanji, vocabulary, and grammar items."
+    }
+  }
+}
